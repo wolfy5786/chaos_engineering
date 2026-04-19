@@ -1,0 +1,29 @@
+# dummy_test Kubernetes playground — namespace only.
+#
+# Filename prefix (00-) ensures `kubectl apply -f dummy_test/k8s/` creates this
+# namespace before Deployments/Services (kubectl applies directory files in name order).
+#
+# Before apply, build images from repo root (paths relative to project root):
+#   docker build -f dummy_test/docker/Dockerfile.gateway -t dummy-test/gateway:latest dummy_test
+#   docker build -f dummy_test/docker/Dockerfile.svc_a -t dummy-test/svc-a:latest dummy_test
+#   docker build -f dummy_test/docker/Dockerfile.svc_b -t dummy-test/svc-b:latest dummy_test
+#   docker build -f dummy_test/docker/Dockerfile.auth -t dummy-test/auth:latest dummy_test
+#
+# For kind/minikube/Docker Desktop Kubernetes, Deployments use imagePullPolicy: Never so nodes use local images.
+# For a remote registry, push images, set imagePullSecrets if needed, and change imagePullPolicy to IfNotPresent.
+#
+# Apply all manifests in this directory, then:
+#   kubectl wait --for=condition=available deployment -l app.kubernetes.io/part-of=dummy-test -n dummy-test --timeout=120s
+#   kubectl port-forward -n dummy-test svc/gateway 8000:8000
+#   curl http://localhost:8000/health
+#   curl http://localhost:8000/chain
+#   kubectl logs -n dummy-test -l app.kubernetes.io/component=gateway
+#   kubectl logs -n dummy-test -l app.kubernetes.io/component=svc-a
+#   kubectl logs -n dummy-test -l app.kubernetes.io/component=svc-b
+#   kubectl logs -n dummy-test -l app.kubernetes.io/component=auth
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dummy-test
+  labels:
+    app.kubernetes.io/part-of: dummy-test

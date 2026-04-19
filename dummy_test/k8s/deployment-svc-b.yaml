@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: svc-b
+  namespace: dummy-test
+  labels:
+    app.kubernetes.io/name: svc-b
+    app.kubernetes.io/component: svc-b
+    app.kubernetes.io/part-of: dummy-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: svc-b
+      app.kubernetes.io/part-of: dummy-test
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: svc-b
+        app.kubernetes.io/component: svc-b
+        app.kubernetes.io/part-of: dummy-test
+    spec:
+      containers:
+        - name: svc-b
+          image: dummy-test/svc-b:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8000
+              name: http
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5

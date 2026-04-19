@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth
+  namespace: dummy-test
+  labels:
+    app.kubernetes.io/name: auth
+    app.kubernetes.io/component: auth
+    app.kubernetes.io/part-of: dummy-test
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: auth
+    app.kubernetes.io/part-of: dummy-test
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http

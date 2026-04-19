@@ -1,0 +1,26 @@
+# Build all images (from dummy_test/): docker compose build
+# From repo root: docker compose -f dummy_test/docker-compose.yml build
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.gateway
+    image: dummy-test/gateway:latest
+
+  svc-a:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.svc_a
+    image: dummy-test/svc-a:latest
+
+  svc-b:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.svc_b
+    image: dummy-test/svc-b:latest
+
+  auth:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.auth
+    image: dummy-test/auth:latest

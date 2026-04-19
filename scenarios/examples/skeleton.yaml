@@ -1,0 +1,45 @@
+name: skeleton-smoke
+duration_seconds: 0
+
+# ---------------------------------------------------------------------------
+# Workload generator configuration (optional)
+# Remove or adjust for your target system.
+# ---------------------------------------------------------------------------
+#
+# workload:
+#   type: realistic_client
+#
+#   # Target throughput in requests per second across all workers.
+#   rps: 10
+#
+#   # Number of worker threads (optional).
+#   # Defaults to min(rps, 20).  Each worker fires at (num_workers / rps) req/s.
+#   # num_workers: 5
+#
+#   # How long to wait for a single HTTP request before timing out (seconds).
+#   # request_timeout_seconds: 10
+#
+#   # How long to wait for workers to finish when stop() is called (seconds).
+#   # stop_timeout_seconds: 10
+#
+#   # Optional: increase concurrency during the fault-injection phase.
+#   # fault_rps: 20
+#
+#   # Target service URLs.
+#   # base_url can also be set via the WORKLOAD_BASE_URL environment variable.
+#   targets:
+#     base_url: "http://localhost:8000"
+#     endpoints:
+#       login:          "POST /auth/login"
+#       browse_profile: "GET  /users/1/profile"
+#       access_data:    "GET  /data"
+#
+#   # Operations to cycle through (chosen at random per request).
+#   operations:
+#     - login
+#     - browse_profile
+#     - access_data
+#
+#   # Optional static headers sent with every request.
+#   # headers:
+#   #   X-Test-Run: "chaos-smoke"
