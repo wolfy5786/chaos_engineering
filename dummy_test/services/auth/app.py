@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr, Field
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -64,11 +64,13 @@ def _agent_debug_ndjson(
         "data": data,
         "timestamp": int(time.time() * 1000),
     }
+    line = json.dumps(payload)
     try:
         with open(_AGENT_DEBUG_LOG, "a", encoding="utf-8") as f:
-            f.write(json.dumps(payload) + "\n")
+            f.write(line + "\n")
     except OSError:
         pass
+    logger.info("AGENT_DEBUG7388CE %s", line)
 
 
 class _AgentRequestLogMiddleware(BaseHTTPMiddleware):
@@ -127,7 +129,12 @@ def _dump_model(obj: Any) -> Any:
     if obj is None:
         return None
     if hasattr(obj, "model_dump"):
-        return obj.model_dump()
+        # mode="json" coerces non-JSON-native types (e.g. datetime, UUID) into
+        # strings so the result is safe to hand to starlette.JSONResponse.
+        try:
+            return obj.model_dump(mode="json")
+        except TypeError:
+            return obj.model_dump()
     if isinstance(obj, dict):
         return obj
     return {"repr": repr(obj)}
@@ -158,13 +165,13 @@ def health() -> dict[str, str]:
 
 @app.post("/signup")
 @app.post("/auth/signup")
-def signup(body: Credentials) -> JSONResponse:
+def signup(request: Request, body: Credentials) -> JSONResponse:
     # #region agent log
     _agent_debug_ndjson(
         "C",
         "app.py:signup",
         "signup_handler_entered",
-        {"path": "/signup"},
+        {"path": request.url.path},
     )
     # #endregion
     # Deliberately insecure: log credentials for lab visibility (not for production).

@@ -30,6 +30,9 @@ spec:
           envFrom:
             - secretRef:
                 name: supabase-auth
+          env:
+            - name: DEBUG_AGENT_LOG
+              value: "/tmp/debug-7388ce.log"
           livenessProbe:
             httpGet:
               path: /health

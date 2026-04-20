@@ -1,17 +1,34 @@
-# Build all images (from dummy_test/): docker compose build
-# From repo root: docker compose -f dummy_test/docker-compose.yml build
+# Build all images (from dummy_test/):   docker compose build
+# From repo root:                         docker compose -f dummy_test/docker-compose.yml build
+# Run the stack (from dummy_test/):       docker compose up --build
+# Stop + remove:                          docker compose down
+#
+# Env: auth reads SUPABASE_URL / SUPABASE_KEY (and optional DATABASE_URL) from
+# services/auth/.env — copy services/auth/.env.example first.
 services:
   gateway:
     build:
       context: .
       dockerfile: docker/Dockerfile.gateway
     image: dummy-test/gateway:latest
+    environment:
+      SVC_A_URL: http://svc-a:8000
+      AUTH_SERVICE_URL: http://auth:8000
+    ports:
+      - "8000:8000"
+    depends_on:
+      - svc-a
+      - auth
 
   svc-a:
     build:
       context: .
       dockerfile: docker/Dockerfile.svc_a
     image: dummy-test/svc-a:latest
+    environment:
+      SVC_B_URL: http://svc-b:8000
+    depends_on:
+      - svc-b
 
   svc-b:
     build:
@@ -24,3 +41,5 @@ services:
       context: .
       dockerfile: docker/Dockerfile.auth
     image: dummy-test/auth:latest
+    env_file:
+      - services/auth/.env

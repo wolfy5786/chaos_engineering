@@ -130,7 +130,45 @@ docker build --no-cache -f dummy_test/docker/Dockerfile.auth -t dummy-test/auth:
 
 ---
 
-## Run
+## Run on Docker Engine (Compose)
+
+Use this for a single-host run with just Docker Engine — no Kubernetes cluster required. All four services run on a user-defined Compose network; the only port published to your host is `gateway` on `8000`.
+
+1. **Install Docker Engine + the Compose plugin.** Verify with `docker version` and `docker compose version` (Docker Desktop or a standalone Engine install on Linux both work).
+2. **Create `dummy_test/services/auth/.env`** from `[services/auth/.env.example](services/auth/.env.example)` and fill in `SUPABASE_URL` and `SUPABASE_KEY` (anon key). If you are using [local Supabase](#local-supabase-cli), `SUPABASE_URL` must be reachable from inside the `auth` container — use `http://host.docker.internal:54321` on Docker Desktop (Windows/macOS), or the host's LAN IP on Linux, instead of `http://127.0.0.1:54321`. Do not commit `.env`.
+3. **Build and start the stack** from the `dummy_test` directory:
+   ```bash
+   docker compose up --build -d
+   ```
+   Or, from the repository root:
+   ```bash
+   docker compose -f dummy_test/docker-compose.yml up --build -d
+   ```
+4. **Check status and logs:**
+   ```bash
+   docker compose ps
+   docker compose logs -f gateway auth
+   ```
+5. **Call the entrypoint** (gateway is published on `localhost:8000`):
+   ```bash
+   curl http://localhost:8000/health
+   curl http://localhost:8000/chain
+   curl -s -X POST http://localhost:8000/auth/signup -H "Content-Type: application/json" -d "{\"email\":\"user@example.com\",\"password\":\"your-password\"}"
+   curl -s -X POST http://localhost:8000/auth/login  -H "Content-Type: application/json" -d "{\"email\":\"user@example.com\",\"password\":\"your-password\"}"
+   ```
+6. **Stop and remove** the stack (keeps built images):
+   ```bash
+   docker compose down
+   ```
+   Add `--rmi local -v` to also delete the built images and any named volumes.
+
+**Workload / scenario `base_url` (Docker Engine):** `http://localhost:8000` from your host, or `http://gateway:8000` from another container on the same Compose network.
+
+**In-container DNS:** inside the Compose network services reach each other by the short names wired in `[docker-compose.yml](docker-compose.yml)`: `http://gateway:8000`, `http://svc-a:8000`, `http://svc-b:8000`, `http://auth:8000` (same URLs as the cluster, just no `.dummy-test.svc.cluster.local` suffix).
+
+---
+
+## Run on Kubernetes
 
 1. **Create `dummy_test/services/auth/.env`** from `[services/auth/.env.example](services/auth/.env.example)` and fill in `SUPABASE_URL` and `SUPABASE_KEY` (anon key). Do not commit `.env`.
 2. **Create the Kubernetes secret** `supabase-auth` in `dummy-test` from that file (required for the **auth** deployment):
@@ -163,11 +201,11 @@ docker build --no-cache -f dummy_test/docker/Dockerfile.auth -t dummy-test/auth:
    curl -s -X POST http://localhost:8000/auth/login -H "Content-Type: application/json" -d "{\"email\":\"user@example.com\",\"password\":\"your-password\"}"
   ```
 
-**Workload / scenario `base_url`:** `http://localhost:8000` while port-forward is active (or `http://gateway:8000` from a pod inside the same namespace).
+**Workload / scenario `base_url` (Kubernetes):** `http://localhost:8000` while port-forward is active (or `http://gateway:8000` from a pod inside the same namespace).
 
 ---
 
-## Stop
+## Stop (Kubernetes)
 
 1. Stop port-forward: focus the terminal where it is running and press **Ctrl+C**.
 2. Remove the playground from the cluster (pick one):
