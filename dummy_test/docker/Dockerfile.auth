@@ -1,9 +1,16 @@
 # Build from repository: docker build -f dummy_test/docker/Dockerfile.auth -t dummy-test/auth:latest dummy_test
+# Set DATABASE_URL (Postgres URI) at runtime to apply supabase/migrations and seed.sql once; see services/auth/.env.example
 FROM python:3.12-slim
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY services/auth /app/service
 WORKDIR /app/service
+# Normalize CRLF from Windows checkouts so ENTRYPOINT shebang works in Linux
+RUN sed -i 's/\r$//' /app/service/docker-entrypoint.sh /app/service/db-init.sh \
+    && chmod +x /app/service/docker-entrypoint.sh /app/service/db-init.sh
 EXPOSE 8000
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["/app/service/docker-entrypoint.sh"]

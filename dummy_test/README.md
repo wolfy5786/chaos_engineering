@@ -12,12 +12,14 @@ Minimal **four-service** stack for load and chaos experiments: **gateway**, **sv
 
 Use these when pointing a workload generator or browser at the system under test. Reachable from your machine after **port-forward** (see [Run](#run)), or from inside the cluster as `http://gateway:8000`.
 
-| Method | Path | Service | Description |
-|--------|------|---------|-------------|
-| `GET` | `/health` | gateway | Liveness-style JSON (`status`, `service`). |
-| `GET` | `/chain` | gateway | Calls **svc-a** → **svc-b**; returns multi-hop JSON (`path`, `hop`, `downstream`). |
+
+| Method | Path           | Service        | Description                                                                                              |
+| ------ | -------------- | -------------- | -------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/health`      | gateway        | Liveness-style JSON (`status`, `service`).                                                               |
+| `GET`  | `/chain`       | gateway        | Calls **svc-a** → **svc-b**; returns multi-hop JSON (`path`, `hop`, `downstream`).                       |
 | `POST` | `/auth/signup` | gateway → auth | Email/password signup; JSON body `{"email":"...","password":"..."}`. Proxied to **auth** `POST /signup`. |
-| `POST` | `/auth/login` | gateway → auth | Email/password login; same JSON body. Proxied to **auth** `POST /login`. |
+| `POST` | `/auth/login`  | gateway → auth | Email/password login; same JSON body. Proxied to **auth** `POST /login`.                                 |
+
 
 Example (port-forward to localhost):
 
@@ -30,21 +32,23 @@ Successful responses are JSON with keys such as `ok`, `user`, and `session` (whe
 
 ### Internal (cluster DNS — not the primary external API)
 
-These are used by other pods or for troubleshooting. Default Kubernetes short names assume namespace **`dummy-test`**.
+These are used by other pods or for troubleshooting. Default Kubernetes short names assume namespace `**dummy-test`**.
 
-| Method | Path | Service | Full in-cluster base (short DNS) | Description |
-|--------|------|---------|-----------------------------------|-------------|
-| `GET` | `/health` | gateway | `http://gateway:8000` | Same as external when called from another pod. |
-| `GET` | `/chain` | gateway | `http://gateway:8000` | Same as external. |
-| `POST` | `/auth/signup` | gateway | `http://gateway:8000` | Same as external (prefer gateway for consistency). |
-| `POST` | `/auth/login` | gateway | `http://gateway:8000` | Same as external. |
-| `GET` | `/health` | svc-a | `http://svc-a:8000` | Health JSON. |
-| `GET` | `/forward` | svc-a | `http://svc-a:8000` | Calls **svc-b** `GET /leaf`; returns `downstream` payload. |
-| `GET` | `/health` | svc-b | `http://svc-b:8000` | Health JSON. |
-| `GET` | `/leaf` | svc-b | `http://svc-b:8000` | Leaf JSON (`service`, `role`). |
-| `GET` | `/health` | auth | `http://auth:8000` | Health JSON (`status`, `service`). |
-| `POST` | `/signup` | auth | `http://auth:8000` | Direct signup (same body as gateway); use for debugging. |
-| `POST` | `/login` | auth | `http://auth:8000` | Direct login (same body as gateway). |
+
+| Method | Path           | Service | Full in-cluster base (short DNS) | Description                                                |
+| ------ | -------------- | ------- | -------------------------------- | ---------------------------------------------------------- |
+| `GET`  | `/health`      | gateway | `http://gateway:8000`            | Same as external when called from another pod.             |
+| `GET`  | `/chain`       | gateway | `http://gateway:8000`            | Same as external.                                          |
+| `POST` | `/auth/signup` | gateway | `http://gateway:8000`            | Same as external (prefer gateway for consistency).         |
+| `POST` | `/auth/login`  | gateway | `http://gateway:8000`            | Same as external.                                          |
+| `GET`  | `/health`      | svc-a   | `http://svc-a:8000`              | Health JSON.                                               |
+| `GET`  | `/forward`     | svc-a   | `http://svc-a:8000`              | Calls **svc-b** `GET /leaf`; returns `downstream` payload. |
+| `GET`  | `/health`      | svc-b   | `http://svc-b:8000`              | Health JSON.                                               |
+| `GET`  | `/leaf`        | svc-b   | `http://svc-b:8000`              | Leaf JSON (`service`, `role`).                             |
+| `GET`  | `/health`      | auth    | `http://auth:8000`               | Health JSON (`status`, `service`).                         |
+| `POST` | `/signup`      | auth    | `http://auth:8000`               | Direct signup (same body as gateway); use for debugging.   |
+| `POST` | `/login`       | auth    | `http://auth:8000`               | Direct login (same body as gateway).                       |
+
 
 Fully qualified names (same ports):
 
@@ -53,7 +57,7 @@ Fully qualified names (same ports):
 - `http://svc-b.dummy-test.svc.cluster.local:8000`
 - `http://auth.dummy-test.svc.cluster.local:8000`
 
-Environment wiring in the cluster: **gateway** uses `SVC_A_URL=http://svc-a:8000` and `AUTH_SERVICE_URL=http://auth:8000`; **svc-a** uses `SVC_B_URL=http://svc-b:8000`; **auth** reads `SUPABASE_URL` and `SUPABASE_KEY` from [`services/auth/.env`](services/auth/.env) when you run locally (copy from [`services/auth/.env.example`](services/auth/.env.example)). In the cluster, the same variables are injected from the Kubernetes `Secret` `supabase-auth`, which you should create **from that `.env` file** (see [Run](#run)) so keys stay in one place (see [`k8s/deployment-auth.yaml`](k8s/deployment-auth.yaml)).
+Environment wiring in the cluster: **gateway** uses `SVC_A_URL=http://svc-a:8000` and `AUTH_SERVICE_URL=http://auth:8000`; **svc-a** uses `SVC_B_URL=http://svc-b:8000`; **auth** reads `SUPABASE_URL` and `SUPABASE_KEY` from `[services/auth/.env](services/auth/.env)` when you run locally (copy from `[services/auth/.env.example](services/auth/.env.example)`). In the cluster, the same variables are injected from the Kubernetes `Secret` `supabase-auth`, which you should create **from that `.env` file** (see [Run](#run)) so keys stay in one place (see `[k8s/deployment-auth.yaml](k8s/deployment-auth.yaml)`).
 
 ---
 
@@ -61,8 +65,8 @@ Environment wiring in the cluster: **gateway** uses `SVC_A_URL=http://svc-a:8000
 
 1. Create a project in the [Supabase dashboard](https://supabase.com/dashboard).
 2. Open **Project Settings → API** and copy:
-   - **Project URL** → `SUPABASE_URL`
-   - **anon public** (publishable) key → `SUPABASE_KEY`  
+  - **Project URL** → `SUPABASE_URL`
+  - **anon public** (publishable) key → `SUPABASE_KEY`  
    Use the **anon** key for this service (do **not** put the `service_role` secret key in Kubernetes manifests or images).
 3. Under **Authentication → Providers**, ensure **Email** is enabled (default).
 4. Optional: **Authentication → Providers → Email** — if **Confirm email** is on, new users get a `user` but `session` may be `null` until they confirm; [password sign-in](https://supabase.com/docs/guides/auth/passwords) may require confirmation depending on settings. Adjust or test accordingly.
@@ -72,21 +76,23 @@ Environment wiring in the cluster: **gateway** uses `SVC_A_URL=http://svc-a:8000
 Instead of a hosted project, you can run Postgres + Auth locally with the [Supabase CLI](https://supabase.com/docs/guides/cli/getting-started) and Docker.
 
 1. From the `dummy_test` directory: `supabase start` (first run downloads images; keep Docker running).
-2. Copy **API URL** (typically `http://127.0.0.1:54321`) and the **anon** `anon key` from the command output into [`services/auth/.env`](services/auth/.env) as `SUPABASE_URL` and `SUPABASE_KEY` (see [`.env.example`](services/auth/.env.example)).
-3. SQL migrations live under [`supabase/migrations/`](supabase/migrations/). After editing them, apply with `supabase db reset` (recreates the local DB and runs migrations + [`seed.sql`](supabase/seed.sql)).
-4. Local Auth is configured in [`supabase/config.toml`](supabase/config.toml) with email confirmations off for this playground so signup can return a session without using the [Inbucket](https://github.com/inbucket/inbucket) mail UI (see [Studio](http://127.0.0.1:54323) and mail at `http://127.0.0.1:54324` if you enable confirmations later).
+2. Copy **API URL** (typically `http://127.0.0.1:54321`) and the **anon** `anon key` from the command output into `[services/auth/.env](services/auth/.env)` as `SUPABASE_URL` and `SUPABASE_KEY` (see `[.env.example](services/auth/.env.example)`).
+3. SQL migrations live under `[supabase/migrations/](supabase/migrations/)`. After editing them, apply with `supabase db reset` (recreates the local DB and runs migrations + `[seed.sql](supabase/seed.sql)`).
+4. Local Auth is configured in `[supabase/config.toml](supabase/config.toml)` with email confirmations off for this playground so signup can return a session without using the [Inbucket](https://github.com/inbucket/inbucket) mail UI (see [Studio](http://127.0.0.1:54323) and mail at `http://127.0.0.1:54324` if you enable confirmations later).
 
 ---
 
 ## Environment variables
 
-| Variable | Consumed by | Description |
-|----------|-------------|-------------|
-| `SUPABASE_URL` | auth | Supabase API URL: hosted `https://<ref>.supabase.co`, or local `http://127.0.0.1:54321` from `supabase start`. Set in `services/auth/.env` (see `.env.example`). |
-| `SUPABASE_KEY` | auth | Supabase **anon** / publishable API key (hosted Project Settings → API, or anon key from `supabase start` output). Set in `services/auth/.env`. |
-| `AUTH_SERVICE_URL` | gateway | Base URL of the auth service (`http://auth:8000` in cluster; local default `http://127.0.0.1:8003`). |
-| `SVC_A_URL` | gateway | **svc-a** base URL (see deployments). |
-| `SVC_B_URL` | svc-a | **svc-b** base URL (see deployments). |
+
+| Variable           | Consumed by | Description                                                                                                                                                      |
+| ------------------ | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SUPABASE_URL`     | auth        | Supabase API URL: hosted `https://<ref>.supabase.co`, or local `http://127.0.0.1:54321` from `supabase start`. Set in `services/auth/.env` (see `.env.example`). |
+| `SUPABASE_KEY`     | auth        | Supabase **anon** / publishable API key (hosted Project Settings → API, or anon key from `supabase start` output). Set in `services/auth/.env`.                  |
+| `AUTH_SERVICE_URL` | gateway     | Base URL of the auth service (`http://auth:8000` in cluster; local default `http://127.0.0.1:8003`).                                                             |
+| `SVC_A_URL`        | gateway     | **svc-a** base URL (see deployments).                                                                                                                            |
+| `SVC_B_URL`        | svc-a       | **svc-b** base URL (see deployments).                                                                                                                            |
+
 
 ---
 
@@ -126,45 +132,36 @@ docker build --no-cache -f dummy_test/docker/Dockerfile.auth -t dummy-test/auth:
 
 ## Run
 
-1. **Create `dummy_test/services/auth/.env`** from [`services/auth/.env.example`](services/auth/.env.example) and fill in `SUPABASE_URL` and `SUPABASE_KEY` (anon key). Do not commit `.env`.
-
+1. **Create `dummy_test/services/auth/.env`** from `[services/auth/.env.example](services/auth/.env.example)` and fill in `SUPABASE_URL` and `SUPABASE_KEY` (anon key). Do not commit `.env`.
 2. **Create the Kubernetes secret** `supabase-auth` in `dummy-test` from that file (required for the **auth** deployment):
-
-   ```bash
+  ```bash
    kubectl create secret generic supabase-auth \
      --from-env-file=dummy_test/services/auth/.env \
      -n dummy-test \
      --dry-run=client -o yaml | kubectl apply -f -
-   ```
 
+  kubectl create secret generic supabase-auth --from-env-file=dummy_test/services/auth/.env -n dummy-test --dry-run=client -o yaml | kubectl apply -f -
+  ```
    If the secret already exists, the same command updates it (or delete the secret first, then re-run). After changing `.env`, re-run this command and restart auth if needed: `kubectl rollout restart deployment/auth -n dummy-test`.
-
 3. Apply manifests (namespace first via `k8s/00-namespace.yaml`; order is fine with `kubectl apply -f` on the directory):
-
-   ```bash
+  ```bash
    kubectl apply -f dummy_test/k8s/
-   ```
-
+  ```
 4. Wait for rollouts:
-
-   ```bash
+  ```bash
    kubectl wait --for=condition=available deployment -l app.kubernetes.io/part-of=dummy-test -n dummy-test --timeout=120s
-   ```
-
+  ```
 5. Expose the **external** gateway on your machine (keep this terminal open):
-
-   ```bash
+  ```bash
    kubectl port-forward -n dummy-test svc/gateway 8000:8000
-   ```
-
+  ```
 6. In another terminal, call the entrypoint:
-
-   ```bash
+  ```bash
    curl http://localhost:8000/health
    curl http://localhost:8000/chain
    curl -s -X POST http://localhost:8000/auth/signup -H "Content-Type: application/json" -d "{\"email\":\"user@example.com\",\"password\":\"your-password\"}"
    curl -s -X POST http://localhost:8000/auth/login -H "Content-Type: application/json" -d "{\"email\":\"user@example.com\",\"password\":\"your-password\"}"
-   ```
+  ```
 
 **Workload / scenario `base_url`:** `http://localhost:8000` while port-forward is active (or `http://gateway:8000` from a pod inside the same namespace).
 
@@ -173,18 +170,11 @@ docker build --no-cache -f dummy_test/docker/Dockerfile.auth -t dummy-test/auth:
 ## Stop
 
 1. Stop port-forward: focus the terminal where it is running and press **Ctrl+C**.
-
 2. Remove the playground from the cluster (pick one):
-
-   ```bash
+  ```bash
    kubectl delete -f dummy_test/k8s/
-   ```
-
+  ```
    Or delete the whole namespace (removes all resources in it):
-
-   ```bash
-   kubectl delete namespace dummy-test
-   ```
 
 ---
 
@@ -209,7 +199,17 @@ If you use a registry instead of local images, push `dummy-test/gateway:latest`,
 
 ## Minikube quick sequence (optional)
 
+Create `[services/auth/.env](services/auth/.env)` first, then create the `**supabase-auth**` secret (same as [Run](#run) steps 1–2). Without that secret, the **auth** deployment stays unavailable and `kubectl wait` times out for the whole label.
+
+Use a **cluster-reachable** `DATABASE_URL` in that secret (for example your hosted Supabase Postgres URI), or omit `DATABASE_URL` so the image skips `db-init` (Auth still uses `SUPABASE_URL` / `SUPABASE_KEY`). A **localhost** `DATABASE_URL` from local Supabase CLI works on your machine but not inside a pod.
+
+If you build with **Docker Desktop** and `minikube image load`, the cluster can keep an older `dummy-test/*:latest` layer cache; prefer building with `minikube docker-env` pointed at Minikube’s Docker (see the **PowerShell** block below) so the node always runs the image you just built.
+
 ```text
+kubectl create secret generic supabase-auth \
+  --from-env-file=dummy_test/services/auth/.env \
+  -n dummy-test \
+  --dry-run=client -o yaml | kubectl apply -f -
 minikube image load dummy-test/gateway:latest
 minikube image load dummy-test/svc-a:latest
 minikube image load dummy-test/svc-b:latest
@@ -222,3 +222,4 @@ kubectl wait --for=condition=available deployment -l app.kubernetes.io/part-of=d
 minikube docker-env | Invoke-Expression
 # then run the same docker build commands from the README from repo root
 ```
+

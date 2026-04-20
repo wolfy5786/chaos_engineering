@@ -2,7 +2,7 @@
 # https://supabase.com/docs/guides/local-development/cli/config
 # A string used to distinguish different Supabase projects on the same host. Defaults to the
 # working directory name when running `supabase init`.
-project_id = "dummy_test"
+project_id = "auth"
 
 [api]
 enabled = true
@@ -195,7 +195,6 @@ web3 = 30
 # provider = "hcaptcha"
 # secret = ""
 
-# dummy_test local auth: email/password via GoTrue; confirmations off so signup returns a session without Inbucket.
 [auth.email]
 # Allow/disallow new user signups via email to your project.
 enable_signup = true

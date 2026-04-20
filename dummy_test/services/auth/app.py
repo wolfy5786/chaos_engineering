@@ -5,8 +5,10 @@ Passwords are logged intentionally for this lab playbook; never do this in produ
 
 from __future__ import annotations
 
+import json
 import logging
 import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +16,8 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr, Field
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
 from supabase import Client, create_client
 
 _AUTH_DIR = Path(__file__).resolve().parent
@@ -28,6 +32,69 @@ logging.basicConfig(
 logger = logging.getLogger("auth")
 
 app = FastAPI(title="dummy auth", version="0.1.0")
+
+# #region agent log
+def _agent_debug_log_path() -> Path:
+    env = os.environ.get("DEBUG_AGENT_LOG", "").strip()
+    if env:
+        return Path(env)
+    f = Path(__file__).resolve()
+    if len(f.parents) > 3:
+        return f.parents[3] / "debug-7388ce.log"
+    return Path.cwd() / "debug-7388ce.log"
+
+
+_AGENT_DEBUG_LOG = _agent_debug_log_path()
+
+
+def _agent_debug_ndjson(
+    hypothesis_id: str,
+    location: str,
+    message: str,
+    data: dict[str, Any],
+    *,
+    run_id: str = "pre-fix",
+) -> None:
+    payload = {
+        "sessionId": "7388ce",
+        "runId": run_id,
+        "hypothesisId": hypothesis_id,
+        "location": location,
+        "message": message,
+        "data": data,
+        "timestamp": int(time.time() * 1000),
+    }
+    try:
+        with open(_AGENT_DEBUG_LOG, "a", encoding="utf-8") as f:
+            f.write(json.dumps(payload) + "\n")
+    except OSError:
+        pass
+
+
+class _AgentRequestLogMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
+        _agent_debug_ndjson(
+            "A",
+            "app.py:_AgentRequestLogMiddleware",
+            "incoming",
+            {"method": request.method, "path": request.url.path},
+        )
+        response = await call_next(request)
+        _agent_debug_ndjson(
+            "A",
+            "app.py:_AgentRequestLogMiddleware",
+            "outgoing",
+            {
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": response.status_code,
+            },
+        )
+        return response
+
+
+app.add_middleware(_AgentRequestLogMiddleware)
+# #endregion
 
 
 class Credentials(BaseModel):
@@ -68,6 +135,14 @@ def _dump_model(obj: Any) -> Any:
 
 @app.on_event("startup")
 def _startup() -> None:
+    # #region agent log
+    _agent_debug_ndjson(
+        "B",
+        "app.py:_startup",
+        "auth_app_started",
+        {"log_file": str(_AGENT_DEBUG_LOG)},
+    )
+    # #endregion
     logger.info(
         "Auth service starting; SUPABASE_URL set=%s SUPABASE_KEY set=%s",
         bool(os.environ.get("SUPABASE_URL")),
@@ -82,7 +157,16 @@ def health() -> dict[str, str]:
 
 
 @app.post("/signup")
+@app.post("/auth/signup")
 def signup(body: Credentials) -> JSONResponse:
+    # #region agent log
+    _agent_debug_ndjson(
+        "C",
+        "app.py:signup",
+        "signup_handler_entered",
+        {"path": "/signup"},
+    )
+    # #endregion
     # Deliberately insecure: log credentials for lab visibility (not for production).
     logger.info(
         "POST /signup step=request_received email=%s password=%s",
@@ -129,6 +213,7 @@ def signup(body: Credentials) -> JSONResponse:
 
 
 @app.post("/login")
+@app.post("/auth/login")
 def login(body: Credentials) -> JSONResponse:
     logger.info(
         "POST /login step=request_received email=%s password=%s",
