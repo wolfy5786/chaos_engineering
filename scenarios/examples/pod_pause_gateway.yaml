@@ -1,0 +1,10 @@
+# Pause gateway container (SIGSTOP); revert sends SIGCONT.
+name: pod_pause_gateway_example
+description: Freeze gateway process briefly; use with caution alongside probes.
+
+faults:
+  - type: pod_pause
+    target:
+      namespace: dummy-test
+      label_selector: app.kubernetes.io/component=gateway
+    delay_seconds: 0

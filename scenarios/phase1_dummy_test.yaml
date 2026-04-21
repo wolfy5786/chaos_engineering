@@ -1,0 +1,61 @@
+# Phase 1 chaos scenario — dummy_test four-service stack
+#
+# Service dependency map (request path):
+#   browser/test → gateway → auth      (POST /auth/signup, /auth/login)
+#                → gateway → svc-a → svc-b  (GET /chain)
+#
+# Fault progression (leaf-first → gateway last):
+#   step 1 (t=0s)   pod_kill  svc-b     leaf gone; /chain starts returning 502
+#   step 2 (t=5s)   pod_pause svc-a     mid-tier frozen; /chain fully stalled
+#   step 3 (t=10s)  pod_kill  auth      auth endpoints fail (503/timeout)
+#   step 4 (t=15s)  pod_pause gateway   all external traffic stalled (full outage)
+#
+# Recovery (orchestrator runs revert in reverse):
+#   SIGCONT gateway → SIGCONT svc-a (svc-b has no SIGCONT — controller recreates it)
+#
+# Run:
+#   python -m framework.fault_injector inject --spec scenarios/phase1_dummy_test.yaml
+
+name: phase1_dummy_test
+description: >
+  Phase 1 end-to-end fault sweep across all four dummy-test services.
+  Validates Deployment self-healing (pod_kill) and process-freeze resilience
+  (pod_pause) for both the /chain and /auth call paths.
+
+faults:
+  # ── step 1: kill the leaf service ───────────────────────────────────────────
+  # svc-b has no downstream dependencies; killing it makes GET /chain fail at
+  # the svc-a → svc-b hop.  The Deployment controller will recreate the pod.
+  - type: pod_kill
+    target:
+      namespace: dummy-test
+      label_selector: app.kubernetes.io/component=svc-b
+    delay_seconds: 0
+
+  # ── step 2: pause the mid-tier service ──────────────────────────────────────
+  # SIGSTOP svc-a PID 1 so it stops processing.  /chain requests now stall
+  # even after svc-b recovers.  Revert sends SIGCONT.
+  - type: pod_pause
+    target:
+      namespace: dummy-test
+      label_selector: app.kubernetes.io/component=svc-a
+    delay_seconds: 5
+
+  # ── step 3: kill the auth service ───────────────────────────────────────────
+  # Removes auth pods; gateway proxies to /auth/signup and /auth/login will
+  # return 503 until the Deployment recreates the pod.
+  - type: pod_kill
+    target:
+      namespace: dummy-test
+      label_selector: app.kubernetes.io/component=auth
+    delay_seconds: 10
+
+  # ── step 4: pause the gateway (full-stack outage) ───────────────────────────
+  # SIGSTOP gateway PID 1.  All external endpoints (/health, /chain, /auth/*)
+  # become unreachable.  This is the final injected fault; revert starts here
+  # and unwinds in reverse order (gateway SIGCONT first).
+  - type: pod_pause
+    target:
+      namespace: dummy-test
+      label_selector: app.kubernetes.io/component=gateway
+    delay_seconds: 15

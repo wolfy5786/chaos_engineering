@@ -356,3 +356,54 @@ def stop(scenario: Mapping[str, Any]) -> None:  # noqa: ARG001
 
     _log_metrics_summary()
     logger.info("workload_generator.stop exit")
+
+
+def get_metrics() -> dict[str, Any]:
+    """Return a snapshot of workload counters and latency stats (thread-safe).
+
+    Safe to call after :func:`stop`; if no workload ran, returns zeroed metrics.
+    """
+    with _metrics_lock:
+        if not _metrics or "requests_total" not in _metrics:
+            return {
+                "requests_total": 0,
+                "requests_success": 0,
+                "requests_failed": 0,
+                "latency_sum_ms": 0.0,
+                "latency_min_ms": 0.0,
+                "latency_max_ms": 0.0,
+                "latency_mean_ms": 0.0,
+                "success_rate_pct": 0.0,
+                "operations": {},
+            }
+        total = int(_metrics.get("requests_total", 0))
+        lat_sum = float(_metrics.get("latency_sum_ms", 0.0))
+        lat_min_raw = _metrics.get("latency_min_ms", float("inf"))
+        snapshot: dict[str, Any] = {
+            "requests_total": total,
+            "requests_success": int(_metrics.get("requests_success", 0)),
+            "requests_failed": int(_metrics.get("requests_failed", 0)),
+            "latency_sum_ms": lat_sum,
+            "latency_max_ms": float(_metrics.get("latency_max_ms", 0.0)),
+            "operations": {
+                op: dict(stats) for op, stats in _metrics.get("operations", {}).items()
+            },
+        }
+
+    lat_min = float(lat_min_raw) if lat_min_raw != float("inf") else 0.0
+    snapshot["latency_min_ms"] = lat_min
+    snapshot["latency_mean_ms"] = (lat_sum / total) if total > 0 else 0.0
+    snapshot["success_rate_pct"] = (
+        (snapshot["requests_success"] / total * 100.0) if total > 0 else 0.0
+    )
+
+    ops_out: dict[str, Any] = {}
+    for op, s in snapshot.get("operations", {}).items():
+        op_total = int(s.get("total", 0))
+        lat_op_sum = float(s.get("latency_sum_ms", 0.0))
+        ops_out[op] = {
+            **s,
+            "latency_mean_ms": (lat_op_sum / op_total) if op_total > 0 else 0.0,
+        }
+    snapshot["operations"] = ops_out
+    return snapshot

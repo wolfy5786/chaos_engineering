@@ -1,0 +1,11 @@
+# Single fault: delete auth pods (Deployment recreates them).
+# Target dummy_test K8s: namespace dummy-test, component label from deployments.
+name: pod_kill_auth_example
+description: Kill auth pods to verify gateway recovery after rollout.
+
+faults:
+  - type: pod_kill
+    target:
+      namespace: dummy-test
+      label_selector: app.kubernetes.io/component=auth
+    delay_seconds: 0

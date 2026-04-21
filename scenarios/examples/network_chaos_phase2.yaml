@@ -1,0 +1,9 @@
+# Expect inject to fail until Phase 2 — documents extension point.
+name: network_chaos_not_implemented
+description: Placeholder; FaultInjector raises NotImplementedError for type network_chaos.
+
+faults:
+  - type: network_chaos
+    target:
+      namespace: dummy-test
+      label_selector: app.kubernetes.io/component=gateway

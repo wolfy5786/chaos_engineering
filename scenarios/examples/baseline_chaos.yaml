@@ -1,0 +1,16 @@
+# Ordered faults against dummy_test stack (label selectors only — no SUT code coupling).
+name: baseline_chaos_dummy_test
+description: Pod kill auth then pause gateway (recovery runs in reverse order).
+
+faults:
+  - type: pod_kill
+    target:
+      namespace: dummy-test
+      label_selector: app.kubernetes.io/component=auth
+    delay_seconds: 0
+
+  - type: pod_pause
+    target:
+      namespace: dummy-test
+      label_selector: app.kubernetes.io/component=gateway
+    delay_seconds: 2

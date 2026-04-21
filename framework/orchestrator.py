@@ -39,12 +39,15 @@ def _load_scenario(scenario_path: Path) -> Mapping[str, Any]:
 
 
 def run_pipeline(scenario_path: Path, results_dir: Path | None = None) -> RunResult:
-    """Execute the skeleton pipeline with full logging (stubs only)."""
+    """Load a scenario, run baseline → fault → recovery phases, then write reports."""
     results_dir = results_dir or Path("results")
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     logger.info("orchestrator.run_pipeline enter run_id=%s", run_id)
 
     scenario = _load_scenario(scenario_path)
+
+    started_at_dt = datetime.now(timezone.utc)
+    started_at = started_at_dt.isoformat()
 
     logger.info("orchestrator: phase baseline")
     fault_injector.baseline(scenario)
@@ -60,14 +63,21 @@ def run_pipeline(scenario_path: Path, results_dir: Path | None = None) -> RunRes
     fault_injector.recover(scenario)
     workload_generator.stop(scenario)
 
+    ended_at_dt = datetime.now(timezone.utc)
+    ended_at = ended_at_dt.isoformat()
+
     logger.info("orchestrator: phase stop monitoring")
     traffic_monitor.stop(scenario)
     log_aggregator.stop(scenario)
 
     observations: MutableMapping[str, Any] = {
+        "started_at": started_at,
+        "ended_at": ended_at,
+        "duration_seconds": round((ended_at_dt - started_at_dt).total_seconds(), 2),
+        "workload": workload_generator.get_metrics(),
+        "faults": scenario.get("faults", []),
         "logs": [],
         "traffic": [],
-        "stub": True,
     }
 
     logger.info("orchestrator: phase analysis (assertions)")
@@ -86,5 +96,5 @@ def run_pipeline(scenario_path: Path, results_dir: Path | None = None) -> RunRes
         scenario=scenario,
         json_report=json_path,
         html_report=html_path,
-        message="Skeleton pipeline completed.",
+        message="Pipeline completed.",
     )
