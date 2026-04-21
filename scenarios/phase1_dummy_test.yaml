@@ -22,6 +22,21 @@ description: >
   Validates Deployment self-healing (pod_kill) and process-freeze resilience
   (pod_pause) for both the /chain and /auth call paths.
 
+# Gateway entrypoint (port-forward or Docker Compose). Omit base_url to use WORKLOAD_BASE_URL.
+workload:
+  type: realistic_client
+  rps: 5
+  targets:
+    base_url: "http://localhost:8000"
+    endpoints:
+      health: "GET /health"
+      chain: "GET /chain"
+      login: "POST /auth/login"
+  operations:
+    - health
+    - chain
+    - login
+
 faults:
   # ── step 1: kill the leaf service ───────────────────────────────────────────
   # svc-b has no downstream dependencies; killing it makes GET /chain fail at
