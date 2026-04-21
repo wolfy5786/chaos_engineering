@@ -24,6 +24,9 @@ def test_registered_names_includes_compute_and_network_stub() -> None:
     names = registered_names()
     assert "pod_kill" in names
     assert "pod_pause" in names
+    assert "single_pod_kill" in names
+    assert "multi_pod_kill" in names
+    assert "multi_service_pod_kill" in names
     assert "network_chaos" in names
 
 

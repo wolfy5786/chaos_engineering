@@ -9,26 +9,44 @@ Scenario ``workload`` block example::
       type: realistic_client
       rps: 10
       num_workers: 5          # optional; defaults to min(rps, 20)
+      selection: random       # or round_robin (default: random)
       targets:
         base_url: "http://localhost:8000"
         endpoints:
-          login:          "POST /auth/login"
-          browse_profile: "GET  /users/1/profile"
-          access_data:    "GET  /data"
+          # Short form — no body:
+          health: "GET /health"
+          chain:  "GET /chain"
+          # Full form — supply JSON body (and optional headers/params).
+          # ${VAR} / ${VAR:default} are expanded from the process environment,
+          # so credentials can live in .env instead of the scenario file.
+          login:
+            method: POST
+            path: /auth/login
+            body:
+              email: "${LOGIN_EMAIL}"
+              password: "${LOGIN_PASSWORD}"
       operations:
+        - health
+        - chain
         - login
-        - browse_profile
-        - access_data
 
 ``base_url`` may also be provided via the ``WORKLOAD_BASE_URL`` environment
 variable (scenario value takes precedence).
+
+Workers never drop an operation from their rotation on failure: every worker
+keeps issuing requests to every configured endpoint for the whole run.
+Per-operation counters (``_metrics["operations"][op]``) and the summary log
+line make it easy to see which endpoint, if any, is failing.
 """
 
 from __future__ import annotations
 
+import copy
+import itertools
 import logging
 import os
 import random
+import re
 import threading
 import time
 from typing import Any, Mapping, MutableMapping
@@ -36,6 +54,90 @@ from typing import Any, Mapping, MutableMapping
 import requests as _requests
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Endpoint parsing and ${VAR}/${VAR:default} substitution
+# ---------------------------------------------------------------------------
+
+_ENV_PATTERN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::([^}]*))?\}")
+
+
+def _expand_env(value: Any) -> Any:
+    """Recursively replace ``${NAME}`` / ``${NAME:default}`` in strings inside
+    dicts, lists, and scalars. Non-string leaves are returned unchanged.
+    """
+    if isinstance(value, str):
+        def _sub(m: re.Match[str]) -> str:
+            name, default = m.group(1), m.group(2)
+            env_val = os.environ.get(name)
+            if env_val is not None:
+                return env_val
+            return default if default is not None else ""
+        return _ENV_PATTERN.sub(_sub, value)
+    if isinstance(value, Mapping):
+        return {k: _expand_env(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_expand_env(v) for v in value]
+    return value
+
+
+def _parse_endpoint_spec(op: str, spec: Any) -> dict[str, Any]:
+    """Normalize a scenario endpoint entry to ``{method, path, body, headers, params}``.
+
+    Accepts:
+    - ``"POST /auth/login"`` (short form; no body).
+    - ``{method, path, body?, headers?, params?}`` (full form).
+
+    ``${VAR}`` tokens in every string field are expanded from the process
+    environment.
+    """
+    if isinstance(spec, str):
+        parts = spec.split(None, 1)
+        if len(parts) == 2:
+            method, path = parts[0].upper(), parts[1].lstrip()
+        else:
+            method, path = "GET", parts[0]
+        return {
+            "method": method,
+            "path": _expand_env(path),
+            "body": None,
+            "headers": None,
+            "params": None,
+        }
+    if isinstance(spec, Mapping):
+        method = str(spec.get("method", "GET")).upper()
+        path = spec.get("path")
+        if not isinstance(path, str) or not path:
+            raise ValueError(
+                f"workload endpoint {op!r}: 'path' is required (got {path!r})"
+            )
+        body = spec.get("body")
+        headers = spec.get("headers")
+        params = spec.get("params")
+        return {
+            "method": method,
+            "path": _expand_env(path),
+            "body": _expand_env(copy.deepcopy(body)) if body is not None else None,
+            "headers": _expand_env(copy.deepcopy(headers)) if headers else None,
+            "params": _expand_env(copy.deepcopy(params)) if params else None,
+        }
+    raise TypeError(
+        f"workload endpoint {op!r}: expected string or mapping, got {type(spec).__name__}"
+    )
+
+
+def _compile_endpoints(workload_cfg: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+    """Pre-parse every entry in ``targets.endpoints`` once per run."""
+    targets: Mapping[str, Any] = workload_cfg.get("targets") or {}
+    raw: Mapping[str, Any] = targets.get("endpoints") or {}
+    compiled: dict[str, dict[str, Any]] = {}
+    for op, spec in raw.items():
+        try:
+            compiled[op] = _parse_endpoint_spec(op, spec)
+        except (TypeError, ValueError) as e:
+            logger.error("workload_generator: %s", e)
+            raise
+    return compiled
 
 # ---------------------------------------------------------------------------
 # Module-level state (reset on each run_baseline_load call)
@@ -65,7 +167,12 @@ def _reset_state() -> None:
     }
 
 
-def _record(op: str, success: bool, latency_ms: float) -> None:
+def _record(
+    op: str,
+    success: bool,
+    latency_ms: float,
+    status_code: int | None = None,
+) -> None:
     with _metrics_lock:
         _metrics["requests_total"] += 1
         if success:
@@ -80,7 +187,13 @@ def _record(op: str, success: bool, latency_ms: float) -> None:
 
         op_stats = _metrics["operations"].setdefault(
             op,
-            {"total": 0, "success": 0, "failed": 0, "latency_sum_ms": 0.0},
+            {
+                "total": 0,
+                "success": 0,
+                "failed": 0,
+                "latency_sum_ms": 0.0,
+                "status_counts": {},
+            },
         )
         op_stats["total"] += 1
         if success:
@@ -88,6 +201,10 @@ def _record(op: str, success: bool, latency_ms: float) -> None:
         else:
             op_stats["failed"] += 1
         op_stats["latency_sum_ms"] += latency_ms
+        if status_code is not None:
+            key = str(status_code)
+            op_stats.setdefault("status_counts", {})
+            op_stats["status_counts"][key] = op_stats["status_counts"].get(key, 0) + 1
 
 
 def _build_session(workload_cfg: Mapping[str, Any]) -> _requests.Session:
@@ -104,15 +221,28 @@ def _worker_loop(
     sleep_interval: float,
     worker_id: int,
 ) -> None:
-    """Single worker thread: fires HTTP requests until stop_event is set."""
-    operations: list[str] = workload_cfg.get("operations", [])
+    """Single worker thread: fires HTTP requests until stop_event is set.
+
+    The worker keeps hitting every configured operation for the duration of
+    the run. Failures (timeouts, connection errors, non-2xx) never remove an
+    operation from the rotation — they are counted and the worker continues.
+    """
+    operations: list[str] = list(workload_cfg.get("operations", []))
     targets: Mapping[str, Any] = workload_cfg.get("targets", {})
-    endpoints: Mapping[str, str] = targets.get("endpoints", {})
+    compiled_endpoints = _compile_endpoints(workload_cfg)
     base_url: str = (
         targets.get("base_url")
         or os.environ.get("WORKLOAD_BASE_URL", "")
     ).rstrip("/")
     timeout: float = float(workload_cfg.get("request_timeout_seconds", 10))
+    selection: str = str(workload_cfg.get("selection", "random")).lower()
+    if selection not in {"random", "round_robin"}:
+        logger.warning(
+            "workload_generator worker-%d: unknown selection=%r; falling back to 'random'",
+            worker_id,
+            selection,
+        )
+        selection = "random"
 
     session = _build_session(workload_cfg)
 
@@ -132,14 +262,29 @@ def _worker_loop(
         stop_event.wait()
         return
 
-    logger.debug("workload_generator worker-%d: started (interval=%.3fs)", worker_id, sleep_interval)
+    # Offset per worker so round-robin doesn't line workers up on the same op.
+    rr_iter = itertools.cycle(operations[worker_id % len(operations):] + operations[: worker_id % len(operations)])
+
+    logger.debug(
+        "workload_generator worker-%d: started (interval=%.3fs, selection=%s, ops=%s)",
+        worker_id,
+        sleep_interval,
+        selection,
+        operations,
+    )
 
     while not stop_event.is_set():
-        op = random.choice(operations)
-        endpoint_spec: str = endpoints.get(op, f"GET /{op}")
-        parts = endpoint_spec.split(None, 1)
-        method = parts[0].upper() if len(parts) == 2 else "GET"
-        path = parts[1].lstrip() if len(parts) == 2 else parts[0]
+        if selection == "round_robin":
+            op = next(rr_iter)
+        else:
+            op = random.choice(operations)
+
+        ep = compiled_endpoints.get(op) or _parse_endpoint_spec(op, f"GET /{op}")
+        method = ep["method"]
+        path = ep["path"]
+        body = ep["body"]
+        headers = ep["headers"]
+        params = ep["params"]
 
         url = f"{base_url}{path}" if base_url else path
 
@@ -149,7 +294,14 @@ def _worker_loop(
 
         if base_url:
             try:
-                resp = session.request(method, url, timeout=timeout)
+                req_kwargs: dict[str, Any] = {"timeout": timeout}
+                if body is not None:
+                    req_kwargs["json"] = body
+                if headers:
+                    req_kwargs["headers"] = headers
+                if params:
+                    req_kwargs["params"] = params
+                resp = session.request(method, url, **req_kwargs)
                 status_code = resp.status_code
                 success = resp.status_code < 500
                 logger.debug(
@@ -188,7 +340,7 @@ def _worker_loop(
             success = True
 
         latency_ms = (time.monotonic() - t0) * 1000
-        _record(op, success, latency_ms)
+        _record(op, success, latency_ms, status_code=status_code)
 
         elapsed = time.monotonic() - t0
         wait = max(0.0, sleep_interval - elapsed)
@@ -254,12 +406,19 @@ def _log_metrics_summary() -> None:
         op_total = stats["total"]
         op_success = stats["success"]
         op_mean = (stats["latency_sum_ms"] / op_total) if op_total > 0 else 0.0
+        status_counts = stats.get("status_counts") or {}
+        status_str = (
+            " status=" + ",".join(f"{k}:{v}" for k, v in sorted(status_counts.items()))
+            if status_counts
+            else ""
+        )
         logger.info(
-            "workload_generator metrics [%s]: total=%d success=%d mean_latency=%.1fms",
+            "workload_generator metrics [%s]: total=%d success=%d mean_latency=%.1fms%s",
             op,
             op_total,
             op_success,
             op_mean,
+            status_str,
         )
 
 

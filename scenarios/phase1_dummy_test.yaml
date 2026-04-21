@@ -26,12 +26,23 @@ description: >
 workload:
   type: realistic_client
   rps: 5
+  # Workers keep driving every operation for the entire run — failures are
+  # counted but do not remove an endpoint from the rotation.
+  selection: random
   targets:
     base_url: "http://localhost:8000"
     endpoints:
       health: "GET /health"
       chain: "GET /chain"
-      login: "POST /auth/login"
+      # /auth/login requires a JSON body {email,password}. Credentials come
+      # from the process environment (set LOGIN_EMAIL / LOGIN_PASSWORD in .env).
+      # The account must already exist — run /auth/signup once via curl/Postman.
+      login:
+        method: POST
+        path: /auth/login
+        body:
+          email: "${LOGIN_EMAIL}"
+          password: "${LOGIN_PASSWORD}"
   operations:
     - health
     - chain

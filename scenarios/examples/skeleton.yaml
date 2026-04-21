@@ -30,15 +30,31 @@ duration_seconds: 0
 #   targets:
 #     base_url: "http://localhost:8000"
 #     endpoints:
-#       login:          "POST /auth/login"
+#       # Short form (no body).
 #       browse_profile: "GET  /users/1/profile"
 #       access_data:    "GET  /data"
+#       # Full form — supply a JSON body and optional headers/params.
+#       # ${VAR} / ${VAR:default} are substituted from the process environment.
+#       login:
+#         method: POST
+#         path: /auth/login
+#         body:
+#           email: "${LOGIN_EMAIL}"
+#           password: "${LOGIN_PASSWORD}"
+#         # headers:
+#         #   X-Test-Run: "chaos-smoke"
+#         # params:
+#         #   debug: "1"
 #
-#   # Operations to cycle through (chosen at random per request).
+#   # Operations to cycle through. Workers keep hitting every op for the
+#   # entire run; failures do not remove an endpoint from rotation.
 #   operations:
 #     - login
 #     - browse_profile
 #     - access_data
+#
+#   # Endpoint selection strategy: random (default) or round_robin.
+#   # selection: round_robin
 #
 #   # Optional static headers sent with every request.
 #   # headers:

@@ -30,6 +30,13 @@ spec:
           env:
             - name: SVC_B_URL
               value: "http://svc-b:8000"
+          resources:
+            requests:
+              cpu: 40m
+              memory: 64Mi
+            limits:
+              cpu: 150m
+              memory: 128Mi
           livenessProbe:
             httpGet:
               path: /health

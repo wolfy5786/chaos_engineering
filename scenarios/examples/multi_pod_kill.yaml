@@ -1,0 +1,12 @@
+# Delete up to ``count`` random pods from one service (label selector).
+# If the Deployment has fewer replicas than ``count``, all matching pods are deleted.
+name: multi_pod_kill_example
+description: Kill two random svc-a pods when multiple replicas exist.
+
+faults:
+  - type: multi_pod_kill
+    target:
+      namespace: dummy-test
+      label_selector: app.kubernetes.io/component=svc-a
+    count: 2
+    delay_seconds: 0

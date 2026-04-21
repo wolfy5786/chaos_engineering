@@ -27,6 +27,13 @@ spec:
           ports:
             - containerPort: 8000
               name: http
+          resources:
+            requests:
+              cpu: 40m
+              memory: 64Mi
+            limits:
+              cpu: 150m
+              memory: 128Mi
           livenessProbe:
             httpGet:
               path: /health

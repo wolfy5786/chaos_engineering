@@ -1,0 +1,14 @@
+# Delete pods from an explicit selector list across services.
+name: multi_service_pod_kill_example
+description: Kill pods from selected services within dummy-test.
+
+faults:
+  - type: multi_service_pod_kill
+    target:
+      namespace: dummy-test
+      label_selector: ""
+    targets:
+      - app.kubernetes.io/component=auth
+      - app.kubernetes.io/component=svc-a
+      - app.kubernetes.io/component=svc-b
+    delay_seconds: 0

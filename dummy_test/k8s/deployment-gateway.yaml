@@ -8,7 +8,7 @@ metadata:
     app.kubernetes.io/component: gateway
     app.kubernetes.io/part-of: dummy-test
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       app.kubernetes.io/name: gateway
@@ -34,6 +34,13 @@ spec:
               value: "http://auth:8000"
             - name: DEBUG_AGENT_LOG
               value: "/tmp/debug-7388ce.log"
+          resources:
+            requests:
+              cpu: 75m
+              memory: 96Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
           livenessProbe:
             httpGet:
               path: /health

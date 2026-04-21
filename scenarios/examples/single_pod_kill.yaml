@@ -1,0 +1,11 @@
+# Delete one random pod matching the label selector (Deployment recreates it).
+# Compare with pod_kill, which deletes every pod matching the selector.
+name: single_pod_kill_example
+description: Kill a single random svc-b pod to simulate partial replica loss.
+
+faults:
+  - type: single_pod_kill
+    target:
+      namespace: dummy-test
+      label_selector: app.kubernetes.io/component=svc-b
+    delay_seconds: 0

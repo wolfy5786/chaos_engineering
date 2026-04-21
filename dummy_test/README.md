@@ -170,6 +170,8 @@ Use this for a single-host run with just Docker Engine — no Kubernetes cluster
 
 ## Run on Kubernetes
 
+**Scaling & resources (local laptop):** Manifests use **low CPU/memory requests and limits** on all four services (`gateway`, `auth`, `svc-a`, `svc-b`). **gateway** and **auth** each run **2** replicas by default and scale to **3** when **CPU** utilization is high, via [`k8s/hpa-gateway.yaml`](k8s/hpa-gateway.yaml) and [`k8s/hpa-auth.yaml`](k8s/hpa-auth.yaml) (min 2, max 3; **CPU-only** target, 70% average utilization). **HPA needs metrics:** install [metrics-server](https://github.com/kubernetes-sigs/metrics-server) in your cluster (without it, HPA cannot scale; pods still run at minimum replicas). Examples: Minikube `minikube addons enable metrics-server`; kind/Docker Desktop often need applying the metrics-server release YAML.
+
 1. **Create `dummy_test/services/auth/.env`** from `[services/auth/.env.example](services/auth/.env.example)` and fill in `SUPABASE_URL` and `SUPABASE_KEY` (anon key). Do not commit `.env`.
 2. **Create the Kubernetes secret** `supabase-auth` in `dummy-test` from that file (required for the **auth** deployment):
   ```bash
@@ -200,6 +202,19 @@ Use this for a single-host run with just Docker Engine — no Kubernetes cluster
    curl -s -X POST http://localhost:8000/auth/signup -H "Content-Type: application/json" -d "{\"email\":\"user@example.com\",\"password\":\"your-password\"}"
    curl -s -X POST http://localhost:8000/auth/login -H "Content-Type: application/json" -d "{\"email\":\"user@example.com\",\"password\":\"your-password\"}"
   ```
+7. **Optional — verify replicas, HPA, and resource caps:**
+   - **Baseline:** `gateway` should show **2/2** ready; `auth` should show **2/2** (HPA min). **Offline manifest check** (no live API server schema fetch; useful when the cluster control plane is down):
+     ```bash
+     kubectl apply --dry-run=client --validate=false -f dummy_test/k8s/
+     ```
+   - **Inspect scheduling and HPA:**
+     ```bash
+     kubectl get deploy,hpa -n dummy-test
+     kubectl get pods -n dummy-test -o wide
+     kubectl describe hpa gateway auth -n dummy-test
+     ```
+   - **Resource requests/limits on pods:** `kubectl describe pod -n dummy-test -l app.kubernetes.io/component=auth` (repeat for `gateway`, `svc-a`, `svc-b` as needed).
+   - **HPA scale to 3:** With **metrics-server** running, generate sustained load (e.g. many `GET /health` and `GET /chain` through the gateway for **gateway** pods; many `POST /auth/login` or `POST /auth/signup` for **auth**). Watch `kubectl get hpa -n dummy-test -w` until **gateway** or **auth** reaches **3** replicas, then idle until scale-down stabilizes (HPA uses a **120s** scale-down window).
 
 **Workload / scenario `base_url` (Kubernetes):** `http://localhost:8000` while port-forward is active (or `http://gateway:8000` from a pod inside the same namespace).
 
