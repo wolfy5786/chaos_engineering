@@ -59,9 +59,84 @@ def _build_json_payload(
         "duration_seconds": observations.get("duration_seconds"),
         "faults": observations.get("faults", []),
         "workload": observations.get("workload", {}),
+        "workload_phases": observations.get("workload_phases", {}),
+        "assertion_results": observations.get("assertion_results", {}),
         "logs": observations.get("logs", []),
         "traffic": observations.get("traffic", []),
     }
+
+
+def _format_assertion_rows(assertion_results: Any) -> str:
+    if not isinstance(assertion_results, Mapping):
+        return "<tr><td colspan='3' class='muted'>No assertion results</td></tr>"
+    checks = assertion_results.get("checks") or []
+    if not isinstance(checks, list) or not checks:
+        return "<tr><td colspan='3' class='muted'>No load assertions configured</td></tr>"
+    lines: list[str] = []
+    for c in checks:
+        if not isinstance(c, Mapping):
+            continue
+        name = html.escape(str(c.get("name", "")))
+        passed = c.get("passed", False)
+        detail = html.escape(str(c.get("detail", "")))
+        cls = "pass" if passed else "fail"
+        lines.append(
+            "<tr>"
+            f"<td>{name}</td>"
+            f"<td class='{cls}'>{'pass' if passed else 'fail'}</td>"
+            f"<td>{detail}</td>"
+            "</tr>"
+        )
+    return "\n".join(lines) if lines else "<tr><td colspan='3' class='muted'>No checks</td></tr>"
+
+
+def _format_phase_delta_rows(workload_phases: Any) -> str:
+    if not isinstance(workload_phases, Mapping):
+        return "<tr><td colspan='4' class='muted'>No phase data</td></tr>"
+    deltas = workload_phases.get("deltas") or {}
+    if not isinstance(deltas, Mapping):
+        return "<tr><td colspan='4' class='muted'>No phase deltas</td></tr>"
+    lines: list[str] = []
+    labels = {
+        "baseline_window": "Baseline window",
+        "injection_window": "Injection window",
+        "recovery_window": "Recovery window",
+    }
+    for key, title in labels.items():
+        d = deltas.get(key)
+        if not isinstance(d, Mapping):
+            continue
+        tot = d.get("requests_total", 0)
+        succ = d.get("requests_success", 0)
+        fail = d.get("requests_failed", 0)
+        mean_lat = d.get("latency_mean_ms", 0.0)
+        lines.append(
+            "<tr>"
+            f"<td>{html.escape(title)}</td>"
+            f"<td class='num'>{html.escape(str(tot))}</td>"
+            f"<td class='num'>{html.escape(str(succ))}</td>"
+            f"<td class='num'>{html.escape(str(fail))}</td>"
+            f"<td class='num'>{html.escape(f'{float(mean_lat):.2f}')}</td>"
+            "</tr>"
+        )
+    if not lines:
+        return "<tr><td colspan='5' class='muted'>No phase deltas</td></tr>"
+    return "\n".join(lines)
+
+
+def _format_burst_meta(workload_phases: Any) -> str:
+    if not isinstance(workload_phases, Mapping):
+        return "<p class='muted'>No burst pattern configured.</p>"
+    bp = workload_phases.get("burst_pattern")
+    if not bp:
+        return "<p class='muted'>Burst pattern disabled or not set.</p>"
+    if not isinstance(bp, Mapping):
+        return "<p class='muted'>Burst pattern disabled or not set.</p>"
+    parts = [f"<strong>Burst load</strong>: enabled"]
+    for k in ("normal_rps", "burst_rps", "burst_duration_seconds", "cooldown_seconds", "cycles"):
+        if k in bp:
+            parts.append(f"{k}={html.escape(str(bp.get(k)))}")
+    return "<p>" + ", ".join(parts) + "</p>"
 
 
 def _format_ops_table_rows(workload: Mapping[str, Any]) -> str:
@@ -122,6 +197,16 @@ def _build_html(run_id: str, payload: Mapping[str, Any]) -> str:
     succ_n = wl.get("requests_success", 0)
     fail_n = wl.get("requests_failed", 0)
 
+    assertion_block = payload.get("assertion_results") or {}
+    overall = assertion_block.get("overall_passed") if isinstance(assertion_block, Mapping) else None
+    overall_html = ""
+    if overall is not None:
+        ocls = "pass" if overall else "fail"
+        overall_html = (
+            f'<p class="overall"><strong>Assertions</strong>: '
+            f'<span class="{ocls}">{"PASSED" if overall else "FAILED"}</span></p>'
+        )
+
     css = """
     body { font-family: system-ui, Segoe UI, Roboto, sans-serif; margin: 2rem; color: #1a1a1a; line-height: 1.5; }
     h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
@@ -133,6 +218,9 @@ def _build_html(run_id: str, payload: Mapping[str, Any]) -> str:
     .num { text-align: right; font-variant-numeric: tabular-nums; }
     .muted { color: #666; font-style: italic; }
     h2 { font-size: 1.15rem; margin-top: 1.5rem; margin-bottom: 0.5rem; }
+    .pass { color: #0a7a32; font-weight: 600; }
+    .fail { color: #b00020; font-weight: 600; }
+    .overall { margin-bottom: 0.5rem; }
     """
 
     desc_block = f'<p class="desc">{desc}</p>' if desc else ""
@@ -151,6 +239,8 @@ def _build_html(run_id: str, payload: Mapping[str, Any]) -> str:
   Ended: {html.escape(str(payload.get("ended_at", "")))}<br>
   Duration: {html.escape(str(payload.get("duration_seconds", "")))} s</p>
   {desc_block}
+  {overall_html}
+  {_format_burst_meta(payload.get("workload_phases"))}
 
   <h2>Workload summary</h2>
   <table>
@@ -163,6 +253,22 @@ def _build_html(run_id: str, payload: Mapping[str, Any]) -> str:
       <tr><td>Latency mean</td><td class="num">{html.escape(f"{float(mean_lat):.2f}")} ms</td></tr>
       <tr><td>Latency min</td><td class="num">{html.escape(f"{float(min_lat):.2f}")} ms</td></tr>
       <tr><td>Latency max</td><td class="num">{html.escape(f"{float(max_lat):.2f}")} ms</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Load assertions</h2>
+  <table>
+    <thead><tr><th>Check</th><th>Result</th><th>Detail</th></tr></thead>
+    <tbody>
+      {_format_assertion_rows(payload.get("assertion_results"))}
+    </tbody>
+  </table>
+
+  <h2>Workload by phase (request deltas)</h2>
+  <table>
+    <thead><tr><th>Phase</th><th class="num">Requests</th><th class="num">Success</th><th class="num">Failed</th><th class="num">Mean latency (ms)</th></tr></thead>
+    <tbody>
+      {_format_phase_delta_rows(payload.get("workload_phases"))}
     </tbody>
   </table>
 

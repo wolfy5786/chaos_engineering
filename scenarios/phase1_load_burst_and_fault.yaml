@@ -1,0 +1,65 @@
+# Phase 1 — burst traffic + pod faults (dummy_test stack)
+#
+# Run (requires CHAOS_BACKEND and a real cluster only for real faults; use null backend for load-only dry run):
+#   python -m framework.cli run --scenario scenarios/phase1_load_burst_and_fault.yaml
+#
+name: phase1_load_burst_and_fault
+description: >
+  Stress-style traffic with burst_pattern and higher fault-phase RPS while
+  injecting the same pod_kill / pod_pause sequence as phase1_dummy_test.
+
+phases:
+  baseline_duration_seconds: 4
+  injection_duration_seconds: 18
+
+workload:
+  type: realistic_client
+  rps: 8
+  fault_rps: 20
+  burst_pattern:
+    enabled: true
+    normal_rps: 8
+    burst_rps: 35
+    burst_duration_seconds: 2
+    cooldown_seconds: 4
+    cycles: null
+  targets:
+    base_url: "http://localhost:8000"
+    endpoints:
+      health: "GET /health"
+      chain: "GET /chain"
+      login: "POST /auth/login"
+  operations:
+    - health
+    - chain
+    - login
+
+faults:
+  - type: pod_kill
+    target:
+      namespace: dummy-test
+      label_selector: app.kubernetes.io/component=svc-b
+    delay_seconds: 0
+  - type: pod_pause
+    target:
+      namespace: dummy-test
+      label_selector: app.kubernetes.io/component=svc-a
+    delay_seconds: 5
+  - type: pod_kill
+    target:
+      namespace: dummy-test
+      label_selector: app.kubernetes.io/component=auth
+    delay_seconds: 10
+  - type: pod_pause
+    target:
+      namespace: dummy-test
+      label_selector: app.kubernetes.io/component=gateway
+    delay_seconds: 15
+
+# During chaos, many requests may fail; thresholds are sanity checks only — tune as needed.
+assertions:
+  load:
+    min_requests_total: 50
+    min_success_rate_pct: 5.0
+    max_failed_requests: 100000
+    max_latency_mean_ms: 120000.0

@@ -25,6 +25,15 @@ duration_seconds: 0
 #   # Optional: increase concurrency during the fault-injection phase.
 #   # fault_rps: 20
 #
+#   # Optional: burst / stress pattern (alternates normal_rps and burst_rps).
+#   # burst_pattern:
+#   #   enabled: true
+#   #   normal_rps: 10
+#   #   burst_rps: 40
+#   #   burst_duration_seconds: 3
+#   #   cooldown_seconds: 5
+#   #   cycles: null
+#
 #   # Target service URLs.
 #   # base_url can also be set via the WORKLOAD_BASE_URL environment variable.
 #   targets:

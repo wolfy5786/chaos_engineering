@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -49,15 +50,30 @@ def run_pipeline(scenario_path: Path, results_dir: Path | None = None) -> RunRes
     started_at_dt = datetime.now(timezone.utc)
     started_at = started_at_dt.isoformat()
 
+    phases_cfg = scenario.get("phases") or {}
+    if not isinstance(phases_cfg, Mapping):
+        phases_cfg = {}
+    baseline_sec = float(phases_cfg.get("baseline_duration_seconds", 0) or 0)
+    injection_sec = float(phases_cfg.get("injection_duration_seconds", 0) or 0)
+
     logger.info("orchestrator: phase baseline")
     fault_injector.baseline(scenario)
     log_aggregator.start(scenario)
     traffic_monitor.start(scenario)
     workload_generator.run_baseline_load(scenario)
+    snap_start = workload_generator.snapshot_metrics()
+    if baseline_sec > 0:
+        logger.info("orchestrator: baseline workload window %.2fs", baseline_sec)
+        time.sleep(baseline_sec)
+    snap_after_baseline = workload_generator.snapshot_metrics()
 
     logger.info("orchestrator: phase injection + workload under fault")
     fault_injector.inject(scenario)
     workload_generator.run_under_fault(scenario)
+    if injection_sec > 0:
+        logger.info("orchestrator: injection workload window %.2fs", injection_sec)
+        time.sleep(injection_sec)
+    snap_after_injection = workload_generator.snapshot_metrics()
 
     logger.info("orchestrator: phase recovery + stop workload")
     fault_injector.recover(scenario)
@@ -70,11 +86,36 @@ def run_pipeline(scenario_path: Path, results_dir: Path | None = None) -> RunRes
     traffic_monitor.stop(scenario)
     log_aggregator.stop(scenario)
 
+    final_workload = workload_generator.get_metrics()
+    workload_phases: dict[str, Any] = {
+        "baseline_duration_seconds": baseline_sec,
+        "injection_duration_seconds": injection_sec,
+        "snapshots_cumulative": {
+            "after_start": snap_start,
+            "after_baseline": snap_after_baseline,
+            "after_injection": snap_after_injection,
+            "final": final_workload,
+        },
+        "deltas": {
+            "baseline_window": workload_generator.diff_workload_metrics(
+                snap_after_baseline, snap_start
+            ),
+            "injection_window": workload_generator.diff_workload_metrics(
+                snap_after_injection, snap_after_baseline
+            ),
+            "recovery_window": workload_generator.diff_workload_metrics(
+                final_workload, snap_after_injection
+            ),
+        },
+        "burst_pattern": workload_generator.burst_pattern_summary(scenario),
+    }
+
     observations: MutableMapping[str, Any] = {
         "started_at": started_at,
         "ended_at": ended_at,
         "duration_seconds": round((ended_at_dt - started_at_dt).total_seconds(), 2),
-        "workload": workload_generator.get_metrics(),
+        "workload": final_workload,
+        "workload_phases": workload_phases,
         "faults": scenario.get("faults", []),
         "logs": [],
         "traffic": [],

@@ -30,6 +30,14 @@ Example (port-forward to localhost):
 
 Successful responses are JSON with keys such as `ok`, `user`, and `session` (when Supabase returns a session). Exact fields follow the [Supabase Python client](https://supabase.com/docs/reference/python/introduction) `AuthResponse` shape (for example, `session` may be `null` until email is confirmed if your project requires confirmation).
 
+### Chaos framework — load and stress (Phase 1)
+
+After the gateway is reachable (port-forward or Compose), point the orchestrator workload at `http://localhost:8000` or set `WORKLOAD_BASE_URL` in the repo `.env`. Ready-made scenarios live under [`../scenarios/`](../scenarios/README.md): **`phase1_load_steady.yaml`**, **`phase1_load_burst.yaml`**, and **`phase1_load_burst_and_fault.yaml`**. Run:
+
+`python -m framework.cli --scenario scenarios/phase1_load_steady.yaml`
+
+Tune `workload.rps`, `workload.burst_pattern`, `phases.*_duration_seconds`, and `assertions.load` in the YAML; HTML/JSON reports include per-phase request deltas and assertion status.
+
 ### Internal (cluster DNS — not the primary external API)
 
 These are used by other pods or for troubleshooting. Default Kubernetes short names assume namespace `**dummy-test`**.

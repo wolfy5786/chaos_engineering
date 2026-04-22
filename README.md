@@ -175,6 +175,29 @@ python -m framework.cli --scenario scenarios/examples/pod_pause_gateway.yaml --l
 
 Reports are written to `results/<run_id>.json` and `results/<run_id>.html`.
 
+### Phase 1 load and stress scenarios
+
+Use the workload block in YAML to drive HTTP traffic (RPS, optional **burst** pattern, and optional **fault_rps** during injection). Tune timing with **`phases`** so the orchestrator holds baseline and injection windows before recovery:
+
+| Field | Purpose |
+|-------|---------|
+| `workload.rps` | Steady target requests per second (shared across workers). |
+| `workload.burst_pattern` | Alternates `normal_rps` and `burst_rps` for stress-style traffic (see `scenarios/examples/skeleton.yaml`). |
+| `workload.fault_rps` | During fault injection, effective RPS is `max(scheduled_rps, fault_rps)`. |
+| `phases.baseline_duration_seconds` | Sleep after starting workload, before applying faults. |
+| `phases.injection_duration_seconds` | Sleep while faults are active, before recovery. |
+| `assertions.load` | Optional pass/fail checks on totals, success rate, failures, and mean latency (see scenarios below). |
+
+Example scenarios (gateway at `http://localhost:8000`):
+
+```bash
+python -m framework.cli --scenario scenarios/phase1_load_steady.yaml
+python -m framework.cli --scenario scenarios/phase1_load_burst.yaml
+python -m framework.cli --scenario scenarios/phase1_load_burst_and_fault.yaml
+```
+
+Reports include **workload phase deltas**, **burst metadata**, and **load assertion** results. Set `WORKLOAD_BASE_URL` if you omit `workload.targets.base_url`.
+
 ### Fault injector CLI (single fault)
 
 Inject a single fault and get back a JSON handle, then revert it:

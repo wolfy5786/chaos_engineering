@@ -1,0 +1,35 @@
+# Phase 1 — steady-state load (no faults)
+#
+# Prerequisites: dummy_test gateway reachable at base_url (see dummy_test/README.md).
+# Run full pipeline:
+#   python -m framework.cli run --scenario scenarios/phase1_load_steady.yaml
+#
+name: phase1_load_steady
+description: >
+  Fixed RPS workload against the dummy_test gateway with baseline and injection
+  windows (injection applies no extra faults when faults: []).
+  Adjust phases and assertions to match your environment.
+
+phases:
+  baseline_duration_seconds: 5
+  injection_duration_seconds: 5
+
+workload:
+  type: realistic_client
+  rps: 15
+  targets:
+    base_url: "http://localhost:8000"
+    endpoints:
+      health: "GET /health"
+      chain: "GET /chain"
+  operations:
+    - health
+    - chain
+
+faults: []
+
+assertions:
+  load:
+    min_requests_total: 30
+    min_success_rate_pct: 70.0
+    max_failed_requests: 500

@@ -1,0 +1,40 @@
+# Phase 1 — burst / stress pattern only (no faults)
+#
+# Run:
+#   python -m framework.cli run --scenario scenarios/phase1_load_burst.yaml
+#
+name: phase1_load_burst
+description: >
+  Alternates normal and burst RPS against the gateway. Longer phase windows
+  give time for multiple burst cycles.
+
+phases:
+  baseline_duration_seconds: 6
+  injection_duration_seconds: 6
+
+workload:
+  type: realistic_client
+  rps: 5
+  burst_pattern:
+    enabled: true
+    normal_rps: 5
+    burst_rps: 30
+    burst_duration_seconds: 2
+    cooldown_seconds: 3
+    cycles: null
+  targets:
+    base_url: "http://localhost:8000"
+    endpoints:
+      health: "GET /health"
+      chain: "GET /chain"
+  operations:
+    - health
+    - chain
+
+faults: []
+
+assertions:
+  load:
+    min_requests_total: 40
+    min_success_rate_pct: 70.0
+    max_failed_requests: 500
