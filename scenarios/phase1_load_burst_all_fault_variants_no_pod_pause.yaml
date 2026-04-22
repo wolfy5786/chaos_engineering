@@ -1,16 +1,21 @@
-# Phase 1 — burst traffic + pod faults (dummy_test stack)
+# Phase 1 — burst traffic + all non-pause pod fault variants (dummy_test stack)
 #
-# Run (requires CHAOS_BACKEND and a real cluster only for real faults; use null backend for load-only dry run):
-#   python -m framework.cli run --scenario scenarios/phase1_load_burst_and_fault.yaml
+# Merges the burst-load profile from phase1_load_burst_and_fault with the
+# broader fault coverage from phase1_dummy_test_all_fault_variants, while
+# intentionally excluding any pod_pause fault.
 #
-name: phase1_load_burst_and_fault
+# Run:
+#   python -m framework.cli run --scenario scenarios/phase1_load_burst_all_fault_variants_no_pod_pause.yaml
+#
+name: phase1_load_burst_all_fault_variants_no_pod_pause
 description: >
   Stress-style traffic with burst_pattern and higher fault-phase RPS while
-  injecting the same pod_kill / pod_pause sequence as phase1_dummy_test.
+  exercising every implemented non-pause pod fault variant for the dummy_test
+  stack in a single Phase 1 run.
 
 phases:
   baseline_duration_seconds: 4
-  injection_duration_seconds: 18
+  injection_duration_seconds: 26
 
 workload:
   type: realistic_client
@@ -44,25 +49,44 @@ workload:
     - login
 
 faults:
+  # Retained from phase1_load_burst_and_fault.
   - type: pod_kill
     target:
       namespace: dummy-test
       label_selector: app.kubernetes.io/component=svc-b
     delay_seconds: 0
-  - type: pod_pause
+
+  # Retained from phase1_dummy_test_all_fault_variants.
+  - type: pod_kill
+    target:
+      namespace: dummy-test
+      label_selector: app.kubernetes.io/component=auth
+    delay_seconds: 0
+
+  - type: single_pod_kill
     target:
       namespace: dummy-test
       label_selector: app.kubernetes.io/component=svc-a
     delay_seconds: 5
+
+  # Retained from phase1_load_burst_and_fault (same selector as above, different fault type).
   - type: pod_kill
     target:
       namespace: dummy-test
       label_selector: app.kubernetes.io/component=auth
     delay_seconds: 10
-  - type: pod_pause
+
+  - type: single_pod_kill
     target:
       namespace: dummy-test
-      label_selector: app.kubernetes.io/component=gateway
+      label_selector: app.kubernetes.io/component=svc-b
+    delay_seconds: 10
+
+  - type: multi_pod_kill
+    target:
+      namespace: dummy-test
+      label_selector: app.kubernetes.io/component=svc-a
+    count: 2
     delay_seconds: 15
 
 # During chaos, many requests may fail; thresholds are sanity checks only — tune as needed.

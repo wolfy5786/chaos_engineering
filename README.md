@@ -194,6 +194,7 @@ Example scenarios (gateway at `http://localhost:8000`):
 python -m framework.cli --scenario scenarios/phase1_load_steady.yaml
 python -m framework.cli --scenario scenarios/phase1_load_burst.yaml
 python -m framework.cli --scenario scenarios/phase1_load_burst_and_fault.yaml
+python -m framework.cli --scenario scenarios/phase1_load_burst_all_fault_variants_no_pod_pause.yaml
 ```
 
 Reports include **workload phase deltas**, **burst metadata**, and **load assertion** results. Set `WORKLOAD_BASE_URL` if you omit `workload.targets.base_url`.

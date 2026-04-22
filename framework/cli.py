@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -11,6 +12,46 @@ from framework.logging_config import setup_logging
 from framework.orchestrator import run_pipeline
 
 logger = logging.getLogger(__name__)
+
+
+def _load_dotenv(env_path: Path) -> int:
+    """Best-effort ``.env`` loader (no external dependency).
+
+    Parses ``KEY=VALUE`` lines, ignores blanks and ``#`` comments, strips a
+    single pair of surrounding quotes, and only sets variables that are not
+    already defined in the process environment. Returns the number of keys
+    applied. Silently does nothing if the file is missing or unreadable —
+    scenario placeholders like ``${LOGIN_EMAIL}`` will then simply expand to
+    whatever is (or isn't) already in ``os.environ``.
+    """
+    if not env_path.is_file():
+        return 0
+    applied = 0
+    try:
+        with env_path.open("r", encoding="utf-8") as fh:
+            for raw in fh:
+                line = raw.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if line.startswith("export "):
+                    line = line[len("export "):].lstrip()
+                if "=" not in line:
+                    continue
+                key, _, value = line.partition("=")
+                key = key.strip()
+                if not key:
+                    continue
+                value = value.strip()
+                if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+                    value = value[1:-1]
+                if key in os.environ:
+                    continue
+                os.environ[key] = value
+                applied += 1
+    except OSError as exc:
+        logger.debug("cli: unable to read %s: %s", env_path, exc)
+        return 0
+    return applied
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -47,6 +88,17 @@ def main(argv: list[str] | None = None) -> int:
         level = logging.INFO
 
     setup_logging(level=level)
+
+    # Populate os.environ from the repo-root .env so scenario placeholders like
+    # ${LOGIN_EMAIL} / ${LOGIN_PASSWORD} resolve during workload generation.
+    # Existing environment variables always win, so CI overrides still apply.
+    repo_root = Path(__file__).resolve().parent.parent
+    for candidate in (Path.cwd() / ".env", repo_root / ".env"):
+        applied = _load_dotenv(candidate)
+        if applied:
+            logger.info("cli: loaded %d variable(s) from %s", applied, candidate)
+            break
+
     scenario_path = args.scenario.resolve()
 
     logger.info(
